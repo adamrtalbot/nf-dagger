@@ -90,6 +90,9 @@ class DaggerTaskHandler extends TaskHandler implements FusionAwareTask {
 
         session.getExecService().submit({
             try {
+                // Small delay to ensure wrapper script is fully written
+                Thread.sleep(100)
+                
                 process = builder.start()
                 int status = process.waitFor()
                 // If dagger CLI itself fails (non-zero), treat as error
@@ -120,23 +123,85 @@ class DaggerTaskHandler extends TaskHandler implements FusionAwareTask {
 
     private ProcessBuilder createLaunchProcessBuilder() {
         // Use dagger call to execute the container with proper volume mounting
-        // This handles host directory references automatically
         final String image = task.getContainer()
         if( !image ) throw new IllegalStateException("Missing container image for Dagger task ${task.name}")
         
         // Get the absolute path of the work directory
         final String workDirPath = task.workDir.toAbsolutePath().toString()
         
-        final List<String> daggerCmd = [
-            'dagger', 'core',
-            'container',
-            'from', '--address', image,
-            'with-mounted-directory', '--path', workDirPath, '--source', '.',
-            'with-workdir', '--path', workDirPath, 
+        // Start building the Dagger command
+        List<String> daggerCmd = ['dagger', 'core', 'container', 'from', '--address', image]
+        
+        // Track mounted paths to avoid duplicates
+        Set<String> mountedPaths = new HashSet<>()
+        
+        // Always mount the task's work directory
+        daggerCmd.addAll(['with-mounted-directory', '--path', workDirPath, '--source', workDirPath])
+        mountedPaths.add(workDirPath)
+        
+        log.debug "[Dagger] Mounted task work dir: ${workDirPath}"
+        
+        // Mount bin directories if they exist
+        // Check for pipeline bin directory
+        Path pipelineDir = session.baseDir
+        log.debug "[Dagger] Pipeline directory: ${pipelineDir}"
+        
+        Path binDir = pipelineDir.resolve('bin')
+        if (Files.exists(binDir) && Files.isDirectory(binDir)) {
+            String binPath = binDir.toAbsolutePath().toString()
+            if (!mountedPaths.contains(binPath)) {
+                daggerCmd.addAll(['with-mounted-directory', '--path', binPath, '--source', binPath])
+                mountedPaths.add(binPath)
+                log.debug "[Dagger] Mounted bin directory: ${binPath}"
+            }
+        } else {
+            log.debug "[Dagger] No bin directory found at: ${binDir}"
+        }
+        
+        // Mount each input file's directory
+        log.debug "[Dagger] Input files: ${task.getInputFilesMap().keySet()}"
+        task.getInputFilesMap().each { name, file ->
+            Path inputPath = file
+            log.debug "[Dagger] Processing input file: ${name} -> ${inputPath}"
+            
+            // Follow symlinks to their actual location
+            Path actualPath = inputPath
+            Set<Path> visited = new HashSet<>()
+            while (Files.isSymbolicLink(actualPath) && !visited.contains(actualPath)) {
+                visited.add(actualPath)
+                Path target = Files.readSymbolicLink(actualPath)
+                if (!target.isAbsolute()) {
+                    target = actualPath.getParent().resolve(target)
+                }
+                actualPath = target.normalize()
+                log.debug "[Dagger] Followed symlink to: ${actualPath}"
+            }
+            
+            if (Files.exists(actualPath)) {
+                // Mount the parent directory of the actual file
+                Path parentDir = actualPath.getParent()
+                if (parentDir != null) {
+                    String parentPath = parentDir.toAbsolutePath().toString()
+                    if (!mountedPaths.contains(parentPath)) {
+                        daggerCmd.addAll(['with-mounted-directory', '--path', parentPath, '--source', parentPath])
+                        mountedPaths.add(parentPath)
+                        log.debug "[Dagger] Mounted input parent directory: ${parentPath}"
+                    }
+                }
+            } else {
+                log.debug "[Dagger] Input file does not exist: ${actualPath}"
+            }
+        }
+        
+        // Set working directory and execute
+        daggerCmd.addAll([
+            'with-workdir', '--path', workDirPath,
             'with-exec', '--args', 'bash,.command.run',
             'directory', '--path', workDirPath,
             'export', '--path', '.'
-        ]
+        ])
+        
+        log.debug "[Dagger] Final mounted paths: ${mountedPaths}"
         
         // Execute the container and export the directory to persist changes
         final String cmdString = daggerCmd.join(' ')
