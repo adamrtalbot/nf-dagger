@@ -9,14 +9,6 @@ A Nextflow executor plugin that enables running Nextflow pipelines using [Dagger
 
 The nf-dagger plugin provides a custom Nextflow executor that leverages Dagger's container runtime to execute pipeline tasks.
 
-## Features
-
-- **Container-based execution**: All tasks run in Dagger-managed containers
-- **Automatic volume mounting**: Input files and work directories are automatically mounted
-- **Standard Nextflow compatibility**: Works with existing Nextflow pipelines
-- **Enhanced caching**: Leverages Dagger's caching capabilities
-- **Detailed logging**: Debug-level logging for troubleshooting
-
 ## Prerequisites
 
 - [Nextflow](https://nextflow.io/) 22.04.0 or later
