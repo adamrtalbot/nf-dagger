@@ -118,6 +118,12 @@ The plugin extends Nextflow's `TaskHandler` interface and implements:
 - Volume mounting logic with symlink resolution
 - Standard Nextflow bash wrapper integration
 
+## Limitations
+
+### Cancelling tasks
+
+Cancelling tasks is not supported, be careful before launching long running tasks.
+
 ## Troubleshooting
 
 ### Enable Debug Logging
