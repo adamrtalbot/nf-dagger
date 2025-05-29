@@ -1,5 +1,7 @@
 # nf-dagger plugin
 
+This plugin is a Nextflow plugin that allows you to use Dagger to run your Nextflow pipelines.
+
 ## Building
 
 To build the plugin:
