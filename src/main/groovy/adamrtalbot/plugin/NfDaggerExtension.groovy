@@ -32,14 +32,4 @@ class NfDaggerExtension extends PluginExtensionPoint {
     protected void init(Session session) {
     }
 
-    /**
-     * Say hello to the given target.
-     *
-     * @param target
-     */
-    @Function
-    void sayHello(String target) {
-        println "Hello, ${target}!"
-    }
-
 }

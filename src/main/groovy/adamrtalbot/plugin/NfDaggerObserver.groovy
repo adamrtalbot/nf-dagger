@@ -31,16 +31,6 @@ import nextflow.processor.TaskProcessor
 class NfDaggerObserver implements TraceObserver {
 
     @Override
-    void onFlowCreate(Session session) {
-        println "Pipeline is starting! 🚀"
-    }
-
-    @Override
-    void onFlowComplete() {
-        println "Pipeline complete! 👋"
-    }
-
-    @Override
     void onProcessCreate(TaskProcessor process) {
         // Enforce the presence of a container directive for processes meant to run with the
         // Dagger executor. This check happens as soon as the process is registered with
