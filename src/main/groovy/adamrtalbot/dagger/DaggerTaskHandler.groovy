@@ -38,8 +38,8 @@ import nextflow.util.ProcessHelper
 /**
  * A {@link TaskHandler} implementation that delegates the actual task
  * execution to the Dagger CLI. It follows the same life-cycle as
- * {@code LocalTaskHandler} but starts a `dagger query` process instead of a
- * plain bash shell.
+ * {@code LocalTaskHandler} but starts a `dagger -m core api call` process
+ * (Dagger 1.0 CLI) instead of a plain bash shell.
  */
 @Slf4j
 @CompileStatic
@@ -129,8 +129,9 @@ class DaggerTaskHandler extends TaskHandler implements FusionAwareTask {
         // Get the absolute path of the work directory
         final String workDirPath = task.workDir.toAbsolutePath().toString()
         
-        // Start building the Dagger command
-        List<String> daggerCmd = ['dagger', 'core', 'container', 'from', '--address', image]
+        // Start building the Dagger command. Dagger 1.0 replaces `dagger core`
+        // with `dagger -m core api call` (the old form is deprecated).
+        List<String> daggerCmd = ['dagger', '-m', 'core', 'api', 'call', 'container', 'from', '--address', image]
         
         // Track mounted paths to avoid duplicates
         Set<String> mountedPaths = new HashSet<>()
