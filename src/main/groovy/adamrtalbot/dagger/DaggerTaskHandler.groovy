@@ -122,51 +122,24 @@ class DaggerTaskHandler extends TaskHandler implements FusionAwareTask {
     }
 
     private ProcessBuilder createLaunchProcessBuilder() {
-        // Use dagger call to execute the container with proper volume mounting
         final String image = task.getContainer()
         if( !image ) throw new IllegalStateException("Missing container image for Dagger task ${task.name}")
-        
-        // Get the absolute path of the work directory
+
         final String workDirPath = task.workDir.toAbsolutePath().toString()
-        
-        // Start building the Dagger command. Dagger 1.0 replaces `dagger core`
-        // with `dagger -m core api call` (the old form is deprecated).
-        List<String> daggerCmd = ['dagger', '-m', 'core', 'api', 'call', 'container', 'from', '--address', image]
-        
-        // Track mounted paths to avoid duplicates
-        Set<String> mountedPaths = new HashSet<>()
-        
-        // Always mount the task's work directory
-        daggerCmd.addAll(['with-mounted-directory', '--path', workDirPath, '--source', workDirPath])
-        mountedPaths.add(workDirPath)
-        
-        log.debug "[Dagger] Mounted task work dir: ${workDirPath}"
-        
-        // Mount bin directories if they exist
-        // Check for pipeline bin directory
-        Path pipelineDir = session.baseDir
-        log.debug "[Dagger] Pipeline directory: ${pipelineDir}"
-        
-        Path binDir = pipelineDir.resolve('bin')
-        if (Files.exists(binDir) && Files.isDirectory(binDir)) {
-            String binPath = binDir.toAbsolutePath().toString()
-            if (!mountedPaths.contains(binPath)) {
-                daggerCmd.addAll(['with-mounted-directory', '--path', binPath, '--source', binPath])
-                mountedPaths.add(binPath)
-                log.debug "[Dagger] Mounted bin directory: ${binPath}"
-            }
-        } else {
-            log.debug "[Dagger] No bin directory found at: ${binDir}"
+        final Set<String> mounts = new LinkedHashSet<>()
+        mounts.add(workDirPath)
+
+        // Mount the pipeline bin directory if it exists
+        Path binDir = session.baseDir.resolve('bin')
+        if (Files.isDirectory(binDir)) {
+            mounts.add(binDir.toAbsolutePath().toString())
         }
-        
+
         // Mount each input file's directory
         log.debug "[Dagger] Input files: ${task.getInputFilesMap().keySet()}"
         task.getInputFilesMap().each { name, file ->
-            Path inputPath = file
-            log.debug "[Dagger] Processing input file: ${name} -> ${inputPath}"
-            
             // Follow symlinks to their actual location
-            Path actualPath = inputPath
+            Path actualPath = file
             Set<Path> visited = new HashSet<>()
             while (Files.isSymbolicLink(actualPath) && !visited.contains(actualPath)) {
                 visited.add(actualPath)
@@ -175,42 +148,18 @@ class DaggerTaskHandler extends TaskHandler implements FusionAwareTask {
                     target = actualPath.getParent().resolve(target)
                 }
                 actualPath = target.normalize()
-                log.debug "[Dagger] Followed symlink to: ${actualPath}"
             }
-            
-            if (Files.exists(actualPath)) {
-                // Mount the parent directory of the actual file
-                Path parentDir = actualPath.getParent()
-                if (parentDir != null) {
-                    String parentPath = parentDir.toAbsolutePath().toString()
-                    if (!mountedPaths.contains(parentPath)) {
-                        daggerCmd.addAll(['with-mounted-directory', '--path', parentPath, '--source', parentPath])
-                        mountedPaths.add(parentPath)
-                        log.debug "[Dagger] Mounted input parent directory: ${parentPath}"
-                    }
-                }
+
+            if (Files.exists(actualPath) && actualPath.getParent() != null) {
+                mounts.add(actualPath.getParent().toAbsolutePath().toString())
             } else {
                 log.debug "[Dagger] Input file does not exist: ${actualPath}"
             }
         }
-        
-        // Set working directory and execute
-        daggerCmd.addAll([
-            'with-workdir', '--path', workDirPath,
-            'with-exec', '--args', 'bash,.command.run',
-            'directory', '--path', workDirPath,
-            'export', '--path', '.'
-        ])
-        
-        log.debug "[Dagger] Final mounted paths: ${mountedPaths}"
-        
-        // Execute the container and export the directory to persist changes
-        final String cmdString = daggerCmd.join(' ')
-        final List<String> cmd = [
-                'bash', '-c',
-                cmdString
-        ]
 
+        log.debug "[Dagger] Mounted paths: ${mounts}"
+
+        final List<String> cmd = daggerCommand(image, workDirPath, mounts)
         log.debug "[Dagger] launch cmd line: ${cmd.join(' ')}"
 
         final workDirFile = task.workDir.toFile()
@@ -220,6 +169,26 @@ class DaggerTaskHandler extends TaskHandler implements FusionAwareTask {
                 .directory(workDirFile)
                 .redirectErrorStream(true)
                 .redirectOutput(logFile)
+    }
+
+    /**
+     * Builds the Dagger 1.0 CLI command that runs {@code .command.run} in {@code image}
+     * and exports the work directory back to the host. Each mount is bound at the same
+     * path inside the container.
+     */
+    static List<String> daggerCommand(String image, String workDir, Collection<String> mounts) {
+        final List<String> cmd = ['dagger', '-m', 'core', 'api', 'call', 'container', 'from', '--address', image]
+        for( String path : mounts ) {
+            cmd.addAll(['with-mounted-directory', '--path', path, '--source', path])
+        }
+        cmd.addAll([
+            'with-workdir', '--path', workDir,
+            // ANY lets a failing task still export .exitcode so Nextflow sees the real status
+            'with-exec', '--args', 'bash,.command.run', '--expect', 'ANY',
+            'directory', '--path', workDir,
+            'export', '--path', '.'
+        ])
+        return cmd
     }
 
     private TaskResult parseResultFile() {

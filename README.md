@@ -11,7 +11,7 @@ The nf-dagger plugin provides a custom Nextflow executor that leverages Dagger's
 
 ## Prerequisites
 
-- [Nextflow](https://nextflow.io/) 22.04.0 or later
+- [Nextflow](https://nextflow.io/) 26.04.0 or later
 - [Dagger CLI](https://docs.dagger.io/install) 1.0 (currently in beta) or later, installed and available in PATH
 - Docker or compatible container runtime
 - Container images for your pipeline processes
@@ -114,11 +114,17 @@ The plugin extends Nextflow's `TaskHandler` interface and implements:
 
 ### Dagger CLI version
 
-The plugin uses the Dagger 1.0 command layout (`dagger -m core api call`), which replaces the deprecated `dagger core` command. It has not been tested with Dagger CLI 0.x releases, which may not provide the `api call` command. See the [Dagger 1.0 migration guide](https://docs.dagger.io/migrate-to-v1/) for details.
+The plugin uses the Dagger 1.0 command layout (`dagger -m core api call`), which replaces the deprecated `dagger core` command. The executor checks `dagger version` at startup and stops the run if the CLI is older than 1.0. See the [Dagger 1.0 migration guide](https://docs.dagger.io/migrate-to-v1/) for details.
+
+To use a remote or cloud engine, set `DAGGER_ENGINE` (for example `DAGGER_ENGINE=cloud`). This replaces `_EXPERIMENTAL_DAGGER_RUNNER_HOST` and `DAGGER_CLOUD_ENGINE` from Dagger 0.x.
 
 ### Cancelling tasks
 
 Cancelling tasks is not supported, be careful before launching long running tasks.
+
+### Resource directives
+
+The `cpus`, `memory` and `time` directives are ignored. Tasks run with whatever resources the Dagger engine provides.
 
 ## Troubleshooting
 

@@ -18,6 +18,7 @@ package adamrtalbot.dagger
 
 import groovy.transform.CompileStatic
 import groovy.util.logging.Slf4j
+import nextflow.exception.AbortOperationException
 import nextflow.executor.Executor
 import nextflow.processor.TaskHandler
 import nextflow.processor.TaskMonitor
@@ -40,10 +41,36 @@ import org.pf4j.ExtensionPoint
 class DaggerExecutor extends Executor implements ExtensionPoint {
 
     @Override
+    protected void register() {
+        super.register()
+        final String version
+        try {
+            final proc = new ProcessBuilder('dagger', 'version').redirectErrorStream(true).start()
+            version = proc.inputStream.text.trim()
+            proc.waitFor()
+        }
+        catch( IOException e ) {
+            throw new AbortOperationException("Dagger CLI not found in PATH - the Dagger executor requires Dagger 1.0 or later", e)
+        }
+        if( !isSupportedVersion(version) )
+            throw new AbortOperationException("The Dagger executor requires Dagger CLI 1.0 or later, found: ${version}")
+        log.debug "[Dagger] Using ${version}"
+    }
+
+    /**
+     * Checks `dagger version` output is 1.0 or later. 0.x prints "dagger v0.21.11 (...)",
+     * 1.0 prints a multi-line report starting "version: v1.0.0-beta.21".
+     */
+    static boolean isSupportedVersion(String versionOutput) {
+        final m = versionOutput =~ /\bv(\d+)\./
+        return m.find() && m.group(1).toInteger() >= 1
+    }
+
+    @Override
     protected TaskMonitor createTaskMonitor() {
         // Reuse the same local polling strategy – task execution still happens
         // on the local node, therefore resource accounting is identical.
-        return LocalPollingMonitor.create(session, name)
+        return LocalPollingMonitor.create(session, config, name)
     }
 
     @Override
