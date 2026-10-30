@@ -10,21 +10,19 @@ import spock.lang.Specification
  */
 class NfDaggerContainerValidationTest extends Specification {
 
+    // ProcessConfig.getProperty can't be stubbed on a Spock mock, so tests use real instances
+
     def 'should throw exception when dagger process missing container'() {
         given:
         def observer = new NfDaggerObserver()
         def executor = Mock(Executor) {
             getName() >> 'dagger'
         }
-        def config = Mock(ProcessConfig) {
-            getProperty('executor') >> 'dagger'
-            getProperty('container') >> null
-        }
+        def config = new ProcessConfig([executor: 'dagger'])
         def process = Mock(TaskProcessor) {
             getExecutor() >> executor
             getConfig() >> config
             getName() >> 'foo'
-            getExecutor() >> executor
         }
 
         when:
@@ -41,10 +39,7 @@ class NfDaggerContainerValidationTest extends Specification {
         def executor = Mock(Executor) {
             getName() >> 'dagger'
         }
-        def config = Mock(ProcessConfig) {
-            getProperty('executor') >> 'dagger'
-            getProperty('container') >> 'ubuntu:latest'
-        }
+        def config = new ProcessConfig([executor: 'dagger', container: 'ubuntu:latest'])
         def process = Mock(TaskProcessor) {
             getExecutor() >> executor
             getConfig() >> config
@@ -64,10 +59,7 @@ class NfDaggerContainerValidationTest extends Specification {
         def executor = Mock(Executor) {
             getName() >> 'local'
         }
-        def config = Mock(ProcessConfig) {
-            getProperty('executor') >> 'local'
-            getProperty('container') >> null
-        }
+        def config = new ProcessConfig([executor: 'local'])
         def process = Mock(TaskProcessor) {
             getExecutor() >> executor
             getConfig() >> config
